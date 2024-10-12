@@ -1,5 +1,6 @@
 import { User } from "../model/user.model.js";
 import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
 
 export const register = async (req, res) => {
   try {
@@ -10,7 +11,7 @@ export const register = async (req, res) => {
     }
 
     const emailAlreadyExists = await User.findOne({ email });
-    console.log(emailAlreadyExists);
+    // console.log(emailAlreadyExists);
 
     if (emailAlreadyExists) {
       return res
@@ -19,7 +20,7 @@ export const register = async (req, res) => {
     }
 
     const userNameAlreadyExists = await User.findOne({ username });
-    console.log(userNameAlreadyExists);
+    // console.log(userNameAlreadyExists);
 
     if (userNameAlreadyExists) {
       return res
@@ -63,9 +64,69 @@ export const register = async (req, res) => {
 // ------------------------------------------------------------------------------------------------------------------------------
 
 export const login = async (req, res) => {
-  return res.send("login");
+  try {
+    const { nameEmail, password } = req.body;
+
+    if (!nameEmail || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "Please enter both username and password",
+      });
+    }
+
+    const user = await User.findOne({
+      $or: [{ username: nameEmail }, { email: nameEmail }],
+    });
+
+    console.log(user);
+
+    if (!user) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid username or password" });
+    }
+
+    const verifyPassword = await bcrypt.compareSync(password, user.password);
+
+    if (!verifyPassword) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid username or password" });
+    }
+
+    console.log(verifyPassword);
+
+    const token = jwt.sign(
+      { userId: user._id, userName: user.username, email: user.email },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: "3d",
+      }
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "User logged in successfully",
+      token,
+    });
+  } catch (error) {
+    console.error("Error during user login:", error);
+    return res.status(500).send({
+      success: false,
+      message: "Internal Server Error",
+    });
+  }
 };
 
+// ------------------------------------------------------------------------------------------------------------------------------
+
 export const profile = async (req, res) => {
-  return res.send("profile");
+  try {
+  } catch (error) {
+    console.error("Error during get profile:", error);
+    return res.status(500).send({
+      success: false,
+      message: "Internal Server Error",
+    });
+  }
 };

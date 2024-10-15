@@ -4,9 +4,9 @@ import jwt from "jsonwebtoken";
 
 export const register = async (req, res) => {
   try {
-    const { username, email, password, firstName, lastName } = req.body;
+    const { username, email, password } = req.body;
 
-    if (!username || !email || !password || !firstName || !lastName) {
+    if (!username || !email || !password) {
       return res.status(400).json({ message: "Please fill in all fields." });
     }
 
@@ -42,16 +42,33 @@ export const register = async (req, res) => {
       username,
       email,
       password: hashedPassword,
-      firstName,
-      lastName,
     });
 
     await user.save();
 
-    res.status(201).json({
+    const token = await jwt.sign(
+      { userId: user._id, userName: user.username, email: user.email },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: "30d",
+      }
+    );
+
+    await res.cookie("token", token, {
+      httpOnly: true,
+      sameSite: "strict", // Prevent CSRF attacks
+      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+    });
+
+    return res.status(201).json({
       success: true,
       message: "User Registered Successfully",
-      user,
+      user: {
+        userId: user._id,
+        username: user.username,
+        email: user.email,
+      },
+      token,
     });
   } catch (error) {
     console.error("Error during user registration:", error);
@@ -78,15 +95,13 @@ export const login = async (req, res) => {
       $or: [{ username: nameEmail }, { email: nameEmail }],
     });
 
-    console.log(user);
-
     if (!user) {
       return res
         .status(400)
         .json({ success: false, message: "Invalid username or password" });
     }
 
-    const verifyPassword = await bcrypt.compareSync(password, user.password);
+    const verifyPassword = bcrypt.compareSync(password, user.password);
 
     if (!verifyPassword) {
       return res
@@ -94,21 +109,30 @@ export const login = async (req, res) => {
         .json({ success: false, message: "Invalid username or password" });
     }
 
-    console.log(verifyPassword);
-
-    const token = jwt.sign(
-      { userId: user._id, userName: user.username, email: user.email },
-      process.env.JWT_SECRET,
-      {
-        expiresIn: "3d",
-      }
-    );
-
-    res.status(200).json({
-      success: true,
-      message: "User logged in successfully",
-      token,
+    const token = await jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
+      expiresIn: "30d",
     });
+
+    const { password: hashedPassword, ...rest } = user._doc;
+
+    return res
+      .cookie("token", token, {
+        httpOnly: true,
+        sameSite: "strict", // Prevent CSRF attacks
+        maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+      })
+      .status(200)
+      .json({
+        success: true,
+        message: "User logged in successfully",
+        token,
+        // user: {
+        //   userId: user._id,
+        //   username: user.username,
+        //   email: user.email,
+        // },
+        user: rest,
+      });
   } catch (error) {
     console.error("Error during user login:", error);
     return res.status(500).send({
@@ -120,13 +144,43 @@ export const login = async (req, res) => {
 
 // ------------------------------------------------------------------------------------------------------------------------------
 
-export const profile = async (req, res) => {
+export async function profile(req, res) {
   try {
+    const user = await User.findById(req.user._id);
+
+    if (user) {
+      res.json({
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+      });
+    } else {
+      res.status(404);
+      throw new Error("User not found");
+    }
   } catch (error) {
-    console.error("Error during get profile:", error);
+    console.error("Error during user retrieval:", error);
     return res.status(500).send({
       success: false,
       message: "Internal Server Error",
     });
   }
+}
+
+// ------------------------------------------------------------------------------------------------------------------------------
+
+export const updateProfile = async (req, res) => {};
+
+// ------------------------------------------------------------------------------------------------------------------------------
+
+export const logout = async (req, res) => {
+  res.cookie("token", "", {
+    httpOnly: true,
+    expires: new Date(0),
+  });
+
+  return res.status(200).json({
+    success: true,
+    message: "User logged out successfully",
+  });
 };

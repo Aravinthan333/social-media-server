@@ -1,10 +1,17 @@
 import express from "express";
-import { login, profile, register } from "../controller/auth.controller.js";
+import {
+  login,
+  logout,
+  profile,
+  register,
+  updateProfile,
+} from "../controller/auth.controller.js";
 
 const authRouter = express.Router();
 
 authRouter.post("/register", register);
 authRouter.post("/login", login);
-authRouter.get("/profile", profile);
+authRouter.route("/profile").get(profile).put(updateProfile);
+authRouter.post("/logout", logout);
 
 export default authRouter;
